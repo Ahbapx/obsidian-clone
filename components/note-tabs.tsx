@@ -134,7 +134,7 @@ export const NoteTabs = memo(function NoteTabs({
       onMouseLeave={handleMouseLeave}
     >
       <ScrollArea className="w-full">
-        <div className="flex">
+        <div className="flex items-center">
           {openNotes.map((note) => (
             <NoteTab
               key={note.id}
@@ -145,30 +145,27 @@ export const NoteTabs = memo(function NoteTabs({
               onClose={onTabClose}
             />
           ))}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 ml-1"
+                  onClick={onNewTab}
+                  aria-label="New note"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>New note</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-
-      {isHovering && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 absolute right-2 top-1 bg-background/50 hover:bg-background"
-                onClick={onNewTab}
-                aria-label="New note"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>New note</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
     </div>
   );
 });

@@ -1,41 +1,52 @@
-import { StreamingTextResponse } from "ai"
+import { google } from "@ai-sdk/google";
+import { streamText } from "ai";
+import type { NextRequest } from "next/server";
 
-// Mock response generator
-function mockStreamGenerator() {
-  const responses = [
-    "I'm a mock AI assistant. The real assistant requires a Google AI API key.",
-    "This is a simulated response. To enable the full AI assistant, please add your GOOGLE_AI_API_KEY to the environment variables.",
-    "I can't actually analyze your notes without the API key, but the UI is fully functional.",
-    "You can explore the AI assistant interface, but responses are pre-defined without the API key.",
-    "This is a placeholder response. The real AI would provide helpful insights about your notes.",
-  ]
+export const runtime = "edge";
 
-  return new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder()
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)]
-
-      // Stream the response character by character with delays
-      for (let i = 0; i < randomResponse.length; i++) {
-        const char = randomResponse[i]
-        controller.enqueue(encoder.encode(char))
-        await new Promise((resolve) => setTimeout(resolve, 20)) // Simulate typing delay
-      }
-
-      controller.close()
-    },
-  })
-}
-
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    // We're always using the mock implementation since we're assuming no API key
-    return new StreamingTextResponse(mockStreamGenerator())
+    const { messages, data } = await req.json();
+    // Compose the prompt from the latest user message and context
+    const latestUserMessage = messages[messages.length - 1]?.content || "";
+    let context = "";
+    if (data?.notes) {
+      context += "Here are the user's notes:\n";
+      for (const note of data.notes) {
+        context += `\n--- Note: ${note.title} (ID: ${
+          note.id
+        }) ---\n${note.content.substring(0, 200)}...\n`;
+      }
+      if (data.currentNoteId) {
+        const currentNote = data.notes.find(
+          (n: any) => n.id === data.currentNoteId
+        );
+        if (currentNote) {
+          context += `\nThe user is currently viewing the note titled \"${currentNote.title}\".\n`;
+        }
+      }
+      context +=
+        "\nBased on this context and the conversation history, respond to the user's latest message.";
+    }
+    const prompt = `${context}\n\nUser Message: ${latestUserMessage}`;
+
+    // Use the Gemini 2.5 Flash Preview model
+    const model = google("gemini-2.5-flash-preview-04-17");
+
+    // Stream the response
+    const result = await streamText({
+      model,
+      prompt,
+    });
+    return result.toDataStreamResponse();
   } catch (error) {
-    console.error("Error in chat route:", error)
-    return new Response(JSON.stringify({ error: "Failed to process chat request" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    })
+    console.error("Error in chat route:", error);
+    return new Response(
+      JSON.stringify({ error: "Failed to process chat request" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   }
 }

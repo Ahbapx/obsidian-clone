@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Editor } from "@/components/editor";
@@ -88,6 +88,37 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
 
   // Use the hook to warn about unsaved changes when closing the window
   useUnsavedChanges(unsavedNoteIds.length > 0);
+
+  const [aiSidebarWidth, setAISidebarWidth] = useState(400);
+
+  // Simple resize handler
+  const startResizeAI = (mouseDownEvent: React.MouseEvent) => {
+    mouseDownEvent.preventDefault();
+
+    // Capture initial width and mouse position
+    const startX = mouseDownEvent.pageX;
+    const startWidth = aiSidebarWidth;
+
+    // Apply cursor styles
+    document.body.style.cursor = "col-resize";
+
+    // Create handlers for mouse movement and release
+    function handleMouseMove(mouseMoveEvent: MouseEvent) {
+      const deltaX = startX - mouseMoveEvent.pageX;
+      const newWidth = Math.min(700, Math.max(300, startWidth + deltaX));
+      setAISidebarWidth(newWidth);
+    }
+
+    function handleMouseUp() {
+      document.body.style.cursor = "";
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    }
+
+    // Add event listeners for resize
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
 
   useEffect(() => {
     if (activeNoteId) {
@@ -467,62 +498,52 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
   const contentComponent = useMemo(() => {
     if (!activeNote) return null;
 
-    if (viewMode === "edit" && !showAIAssistant) {
-      return (
-        <Editor
-          note={activeNote}
-          onChange={(content) => updateNote(activeNote.id, { content })}
-          onTitleChange={(title) => updateNote(activeNote.id, { title })}
-          className="w-full"
-        />
-      );
-    }
-
-    if (viewMode === "edit" && showAIAssistant) {
-      return (
-        <>
-          <Editor
-            note={activeNote}
-            onChange={(content) => updateNote(activeNote.id, { content })}
-            onTitleChange={(title) => updateNote(activeNote.id, { title })}
-            className="w-2/3"
-          />
-          <AIAssistant
-            notes={notes}
-            currentNote={activeNote}
-            onCreateNote={createNewNote}
-            onUpdateNote={updateNote}
-          />
-        </>
-      );
-    }
-
-    if (viewMode === "preview" && !showAIAssistant) {
-      return (
-        <Preview
-          content={activeNote.content}
-          notes={notes}
-          onNoteLink={(id) => router.push(`/notes/${id}`)}
-          className="w-full"
-        />
-      );
-    }
-
+    // Simple shared layout with resizable AI assistant
     return (
-      <>
-        <Preview
-          content={activeNote.content}
-          notes={notes}
-          onNoteLink={(id) => router.push(`/notes/${id}`)}
-          className="w-2/3"
-        />
-        <AIAssistant
-          notes={notes}
-          currentNote={activeNote}
-          onCreateNote={createNewNote}
-          onUpdateNote={updateNote}
-        />
-      </>
+      <div className="flex h-full w-full">
+        {/* Main content area */}
+        <div className="flex-1 h-full overflow-auto min-w-0">
+          {viewMode === "edit" ? (
+            <Editor
+              note={activeNote}
+              onChange={(content) => updateNote(activeNote.id, { content })}
+              onTitleChange={(title) => updateNote(activeNote.id, { title })}
+              className="h-full w-full"
+            />
+          ) : (
+            <Preview
+              content={activeNote.content}
+              notes={notes}
+              onNoteLink={(id) => router.push(`/notes/${id}`)}
+              className="h-full w-full"
+            />
+          )}
+        </div>
+
+        {/* AI Assistant */}
+        {showAIAssistant && (
+          <>
+            {/* Resize handle */}
+            <div
+              className="w-1 cursor-col-resize hover:bg-primary/30 h-full shrink-0"
+              onMouseDown={startResizeAI}
+            />
+
+            {/* AI sidebar */}
+            <div
+              className="h-full border-l shadow-lg"
+              style={{ width: `${aiSidebarWidth}px` }}
+            >
+              <AIAssistant
+                notes={notes}
+                currentNote={activeNote}
+                onCreateNote={createNewNote}
+                onUpdateNote={updateNote}
+              />
+            </div>
+          </>
+        )}
+      </div>
     );
   }, [
     activeNote,
@@ -532,6 +553,7 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
     updateNote,
     createNewNote,
     router,
+    aiSidebarWidth,
   ]);
 
   const handleNoteContentChange = useCallback(
@@ -597,9 +619,6 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
           {activeNote ? (
             <>
               <div className="flex items-center justify-between border-b border-opacity-50 p-2 bg-gradient-to-r from-muted/30 to-background">
-                <div className="text-sm font-medium truncate max-w-[200px]">
-                  {activeNote.title}
-                </div>
                 <div className="flex items-center space-x-2">
                   <Button
                     variant="outline"
@@ -611,6 +630,12 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
                     <Save className="h-3.5 w-3.5 mr-1" />
                     Save
                   </Button>
+                  <ExportMenu note={activeNote} />
+                </div>
+                <div className="text-sm font-medium truncate max-w-[200px]">
+                  {activeNote.title}
+                </div>
+                <div className="flex items-center space-x-2">
                   <Tabs
                     value={viewMode}
                     onValueChange={(value) =>
@@ -629,7 +654,6 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
                       </TabsTrigger>
                     </TabsList>
                   </Tabs>
-                  <ExportMenu note={activeNote} />
                   <Button
                     variant="outline"
                     size="sm"
@@ -661,39 +685,22 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
 
               <div className="flex-1 overflow-hidden relative">
                 {activeNote ? (
-                  <>
-                    {viewMode === "edit" ? (
-                      <Editor
-                        note={activeNote}
-                        onChange={handleNoteContentChange}
-                        onTitleChange={handleNoteTitleChange}
-                        className={cn(showAIAssistant && "w-2/3")}
-                      />
-                    ) : (
-                      <Preview
-                        content={activeNote.content}
-                        notes={notes}
-                        onNoteLink={(id) => router.push(`/notes/${id}`)}
-                        className={cn(showAIAssistant && "w-2/3")}
-                      />
-                    )}
-                    {showAIAssistant && (
-                      <AIAssistant
-                        notes={notes}
-                        currentNote={activeNote}
-                        onCreateNote={createNewNote}
-                        onUpdateNote={updateNote}
-                      />
-                    )}
-                  </>
+                  contentComponent
                 ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                      <h2 className="text-2xl font-bold mb-4">
-                        No note selected
+                  <div className="flex items-center justify-center w-full h-full bg-gradient-to-br from-background to-muted/20">
+                    <div className="text-center max-w-md p-8 rounded-lg border border-opacity-50 bg-card shadow-sm">
+                      <h2 className="text-xl font-bold mb-2">
+                        No Note Selected
                       </h2>
-                      <Button onClick={createNewUnsavedNote}>
-                        Create a new note
+                      <p className="text-muted-foreground mb-6">
+                        Select a note from the sidebar or create a new one to
+                        get started
+                      </p>
+                      <Button
+                        onClick={() => createNewUnsavedNote()}
+                        className="w-full"
+                      >
+                        Create New Note
                       </Button>
                     </div>
                   </div>
@@ -701,18 +708,11 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
               </div>
             </>
           ) : (
-            <div className="flex items-center justify-center w-full h-full bg-gradient-to-br from-background to-muted/20">
-              <div className="text-center max-w-md p-8 rounded-lg border border-opacity-50 bg-card shadow-sm">
-                <h2 className="text-xl font-bold mb-2">No Note Selected</h2>
-                <p className="text-muted-foreground mb-6">
-                  Select a note from the sidebar or create a new one to get
-                  started
-                </p>
-                <Button
-                  onClick={() => createNewUnsavedNote()}
-                  className="w-full"
-                >
-                  Create New Note
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold mb-4">No note selected</h2>
+                <Button onClick={createNewUnsavedNote}>
+                  Create a new note
                 </Button>
               </div>
             </div>

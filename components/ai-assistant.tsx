@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useChat } from "ai/react";
 import {
   Bot,
@@ -41,9 +41,33 @@ export function AIAssistant({
 }: AIAssistantProps) {
   const [activeTab, setActiveTab] = useState<string>("chat");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [apiKeyMissing] = useState(true); // Always true since we're mocking
+  const apiKeyMissing = !process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const initialMessages = useMemo(
+    () => [
+      {
+        id: `welcome-${Date.now()}`,
+        role: "assistant" as const,
+        content:
+          "Hi! I'm your AI assistant. I can help you with your notes. What would you like to do?",
+      },
+    ],
+    []
+  );
+
+  const chatBody = useMemo(
+    () => ({
+      notes: notes.map((note) => ({
+        id: note.id,
+        title: note.title,
+        content: note.content,
+      })),
+      currentNoteId: currentNote.id,
+    }),
+    [notes, currentNote.id]
+  );
 
   const {
     messages,
@@ -53,35 +77,9 @@ export function AIAssistant({
     isLoading,
     append,
   } = useChat({
-    initialMessages: [
-      {
-        id: `welcome-${Date.now()}`,
-        role: "assistant",
-        content:
-          "Hi! I'm your AI assistant. I can help you with your notes. What would you like to do?",
-      },
-    ],
-    body: {
-      notes: notes.map((note) => ({
-        id: note.id,
-        title: note.title,
-        content: note.content,
-      })),
-      currentNoteId: currentNote.id,
-    },
+    initialMessages,
+    body: chatBody,
   });
-
-  // Add a warning message about mock mode
-  useEffect(() => {
-    if (apiKeyMissing) {
-      append({
-        id: "api-key-missing",
-        role: "assistant",
-        content:
-          "⚠️ **API Key Missing**: The AI assistant is running in mock mode. To enable full functionality, please add your GOOGLE_AI_API_KEY to the environment variables.",
-      });
-    }
-  }, [apiKeyMissing, append]);
 
   // Scroll to bottom of messages
   useEffect(() => {
@@ -131,7 +129,7 @@ export function AIAssistant({
   };
 
   return (
-    <div className="w-1/3 h-full border-l flex flex-col bg-gradient-to-b from-background to-muted/20">
+    <div className="h-full flex flex-col overflow-hidden">
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
@@ -154,14 +152,11 @@ export function AIAssistant({
           </TabsList>
         </div>
 
-        <TabsContent value="chat" className="flex-1 flex flex-col p-0 mt-0">
-          {apiKeyMissing && (
-            <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 p-2 m-2 rounded-md text-xs">
-              Running in mock mode. AI responses are simulated.
-            </div>
-          )}
-
-          <ScrollArea className="flex-1 p-4">
+        <TabsContent
+          value="chat"
+          className="flex-1 flex flex-col p-0 mt-0 overflow-hidden"
+        >
+          <ScrollArea className="flex-1 p-4 overflow-auto">
             <div className="space-y-4">
               {messages.map((message) => (
                 <div
@@ -222,12 +217,6 @@ export function AIAssistant({
         </TabsContent>
 
         <TabsContent value="tools" className="flex-1 p-4 mt-0">
-          {apiKeyMissing && (
-            <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 p-2 mb-4 rounded-md text-xs">
-              Running in mock mode. AI features are simulated.
-            </div>
-          )}
-
           <div className="grid grid-cols-2 gap-4">
             <Card className="bg-gradient-to-br from-card to-muted/20">
               <CardHeader className="p-4">
