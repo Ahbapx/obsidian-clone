@@ -131,11 +131,21 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
             router.push(`/notes/${notes[0].id}`);
           } else {
             // No notes exist at all, clear active note and go to base path
-            setActiveNote(null);
-            if (pathname !== "/notes") {
-              // Avoid redundant navigation
-              router.push("/notes");
+            // setActiveNote(null);
+            // if (pathname !== "/notes") {
+            // Avoid redundant navigation
+            // router.push("/notes");
+            // }
+            // If activeNoteId is present, but the note data isn't found yet,
+            // and the notes array seems empty to this effect's closure,
+            // it's likely a new note being created or state propagating.
+            // We should not redirect away from /notes/[activeNoteId].
+            // We can clear the activeNote if it's stale or doesn't match activeNoteId.
+            if (!activeNote || activeNote.id !== activeNoteId) {
+              setActiveNote(null);
             }
+            // CRITICALLY: The router.push("/notes") call that was here should be removed or commented out
+            // to prevent the redirect when activeNoteId is present.
           }
         }
       }
@@ -149,7 +159,7 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
         setActiveNote(null);
       }
     }
-  }, [activeNoteId, notes, openNotes, router, pathname]); // Keep dependencies
+  }, [activeNoteId, notes, openNotes, router, pathname, activeNote]); // Keep dependencies
 
   // Update open notes when notes change (e.g., title changes) - memoized to avoid unnecessary updates
   useEffect(() => {
@@ -191,6 +201,8 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
       folder: "unsaved", // Special marker for unsaved location
       tags: [],
     };
+
+    setActiveNote(newNote);
 
     setNotes((prev) => [...prev, newNote]);
     setUnsavedNoteIds((prev) => [...prev, newNote.id]);
