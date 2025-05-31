@@ -6,7 +6,6 @@ import { Sidebar } from "@/components/sidebar";
 import { Editor } from "@/components/editor";
 import { Preview } from "@/components/preview";
 import { AIAssistant } from "@/components/ai-assistant";
-import { useLocalStorage } from "@/hooks/use-local-storage";
 import { useHotkeys } from "@/hooks/use-hotkeys";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import type { Note, Folder, Tag } from "@/lib/types";
@@ -35,26 +34,12 @@ function dedupeNotes(notes: Note[]): Note[] {
 export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [notes, setNotes] = useLocalStorage<Note[]>("obsidian-notes", [
-    {
-      id: "welcome",
-      title: "Welcome to NoteVault",
-      content:
-        "# Welcome to NoteVault\n\nThis is a simple clone of the Obsidian note-taking app.\n\n## Features\n\n- Markdown editing with syntax highlighting\n- Live preview\n- File organization\n- Dark mode\n- AI Assistant powered by Gemini\n- Tags for organization\n\n## How to use\n\n1. Create new notes using the + button next to folders\n2. Edit your notes in the editor\n3. Switch to preview mode to see the rendered markdown\n4. Organize your notes in the sidebar\n5. Use the AI assistant to help with your notes\n\n## Keyboard Shortcuts\n\n- `Ctrl+N`: New note\n- `Ctrl+P`: Open command palette\n- `Ctrl+F`: Search notes\n- `Ctrl+S`: Save note (automatic)\n- `Ctrl+/`: Toggle AI assistant\n- `Ctrl+E`: Switch to edit mode\n- `Ctrl+R`: Switch to preview mode\n\n## Linking\n\nYou can link to other notes using double brackets: [[welcome]]\n\n## Tags\n\nYou can add tags to your notes using #tag syntax.\n",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      folder: "/",
-      tags: ["welcome", "tutorial"],
-    },
-  ]);
+  const [notes, setNotes] = useState<Note[]>([]);
 
-  const [folders, setFolders] = useLocalStorage<Folder[]>("obsidian-folders", [
+  const [folders, setFolders] = useState<Folder[]>([
     { id: "root", name: "/", path: "/" },
   ]);
-  const [tags, setTags] = useLocalStorage<Tag[]>("obsidian-tags", [
-    { id: "welcome", name: "welcome" },
-    { id: "tutorial", name: "tutorial" },
-  ]);
+  const [tags, setTags] = useState<Tag[]>([]);
 
   const [activeNote, setActiveNote] = useState<Note | null>(null);
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
@@ -122,21 +107,49 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
 
   useEffect(() => {
     if (activeNoteId) {
-      const note = notes.find((n) => n.id === activeNoteId);
-      if (note) {
-        setActiveNote(note);
+      // Prioritize finding the note in openNotes, as it's added directly in createNewUnsavedNote
+      let note = openNotes.find((n) => n.id === activeNoteId);
 
-        // Add to open notes if not already open
-        if (!openNotes.some((n) => n.id === note.id)) {
-          setOpenNotes((prev) => dedupeNotes([...prev, note]));
+      if (note) {
+        // Note found in openNotes (likely the newly created one)
+        setActiveNote(note);
+      } else {
+        // If not in openNotes (perhaps closed or not updated yet), check main notes list
+        const foundNote = notes.find((n) => n.id === activeNoteId);
+        if (foundNote) {
+          // Found in main list
+          setActiveNote(foundNote); // Use the confirmed found note
+          // Ensure it's added to openNotes if it wasn't already
+          if (!openNotes.some((n) => n.id === foundNote.id)) {
+            setOpenNotes((prev) => dedupeNotes([...prev, foundNote]));
+          }
+        } else {
+          // Note truly not found in either list for this render cycle
+          console.warn(`Note with ID ${activeNoteId} not found. Redirecting.`);
+          if (notes.length > 0) {
+            // Redirect to the first available note if others exist
+            router.push(`/notes/${notes[0].id}`);
+          } else {
+            // No notes exist at all, clear active note and go to base path
+            setActiveNote(null);
+            if (pathname !== "/notes") {
+              // Avoid redundant navigation
+              router.push("/notes");
+            }
+          }
         }
-      } else if (notes.length > 0) {
-        router.push(`/notes/${notes[0].id}`);
       }
-    } else if (notes.length > 0 && pathname === "/notes") {
-      router.push(`/notes/${notes[0].id}`);
+    } else {
+      // No activeNoteId in URL
+      if (notes.length > 0) {
+        // Redirect to the first note if notes exist
+        router.push(`/notes/${notes[0].id}`);
+      } else {
+        // No notes exist, ensure activeNote is null
+        setActiveNote(null);
+      }
     }
-  }, [activeNoteId, notes, router, pathname, openNotes]);
+  }, [activeNoteId, notes, openNotes, router, pathname]); // Keep dependencies
 
   // Update open notes when notes change (e.g., title changes) - memoized to avoid unnecessary updates
   useEffect(() => {
@@ -181,11 +194,19 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
 
     setNotes((prev) => [...prev, newNote]);
     setUnsavedNoteIds((prev) => [...prev, newNote.id]);
+    setOpenNotes((prev) => dedupeNotes([...prev, newNote]));
+
     router.push(`/notes/${newNote.id}`);
 
     // Mark this note for location saving
     setNoteToSaveLocation(newNote.id);
-  }, [setNotes, router]);
+  }, [
+    setNotes,
+    router,
+    setOpenNotes,
+    setUnsavedNoteIds,
+    setNoteToSaveLocation,
+  ]);
 
   const updateNote = useCallback(
     (id: string, data: Partial<Note>) => {
