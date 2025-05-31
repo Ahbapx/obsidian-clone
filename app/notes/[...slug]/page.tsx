@@ -5,6 +5,7 @@ export default async function NotePage({
 }: {
   params: { slug: string[] };
 }) {
-  const slugPath = params.slug.join("/");
+  const awaitedParams = await params;
+  const slugPath = awaitedParams.slug.join("/");
   return <NoteApp activeNoteId={slugPath} />;
 }
