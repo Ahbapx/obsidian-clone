@@ -105,61 +105,50 @@ export function NoteApp({ activeNoteId }: { activeNoteId?: string }) {
     document.addEventListener("mouseup", handleMouseUp);
   };
 
-  useEffect(() => {
-    if (activeNoteId) {
-      // Prioritize finding the note in openNotes, as it's added directly in createNewUnsavedNote
-      let note = openNotes.find((n) => n.id === activeNoteId);
+useEffect(() => {
+  if (activeNoteId) {
+    // Try to find in open notes first, then in all notes
+    let noteToActivate = openNotes.find((n) => n.id === activeNoteId);
+    if (!noteToActivate) {
+      noteToActivate = notes.find((n) => n.id === activeNoteId);
+    }
 
-      if (note) {
-        // Note found in openNotes (likely the newly created one)
-        setActiveNote(note);
-      } else {
-        // If not in openNotes (perhaps closed or not updated yet), check main notes list
-        const foundNote = notes.find((n) => n.id === activeNoteId);
-        if (foundNote) {
-          // Found in main list
-          setActiveNote(foundNote); // Use the confirmed found note
-          // Ensure it's added to openNotes if it wasn't already
-          if (!openNotes.some((n) => n.id === foundNote.id)) {
-            setOpenNotes((prev) => dedupeNotes([...prev, foundNote]));
-          }
-        } else {
-          // Note truly not found in either list for this render cycle
-          console.warn(`Note with ID ${activeNoteId} not found. Redirecting.`);
-          if (notes.length > 0) {
-            // Redirect to the first available note if others exist
-            router.push(`/notes/${notes[0].id}`);
-          } else {
-            // No notes exist at all, clear active note and go to base path
-            // setActiveNote(null);
-            // if (pathname !== "/notes") {
-            // Avoid redundant navigation
-            // router.push("/notes");
-            // }
-            // If activeNoteId is present, but the note data isn't found yet,
-            // and the notes array seems empty to this effect's closure,
-            // it's likely a new note being created or state propagating.
-            // We should not redirect away from /notes/[activeNoteId].
-            // We can clear the activeNote if it's stale or doesn't match activeNoteId.
-            if (!activeNote || activeNote.id !== activeNoteId) {
-              setActiveNote(null);
-            }
-            // CRITICALLY: The router.push("/notes") call that was here should be removed or commented out
-            // to prevent the redirect when activeNoteId is present.
-          }
-        }
+    if (noteToActivate) {
+      setActiveNote(noteToActivate);
+      // If found in general notes but not open, add to openNotes
+      if (!openNotes.some((n) => n.id === noteToActivate.id)) {
+        setOpenNotes((prevOpenNotes) => dedupeNotes([...prevOpenNotes, noteToActivate]));
       }
     } else {
-      // No activeNoteId in URL
+      // Note not found by activeNoteId, this is the original issue point
+      console.warn(`Note with ID ${activeNoteId} not found. Redirecting.`);
       if (notes.length > 0) {
-        // Redirect to the first note if notes exist
+        // Redirect to the first note available if current activeNoteId is invalid
         router.push(`/notes/${notes[0].id}`);
       } else {
-        // No notes exist, ensure activeNote is null
+        // No notes available at all
         setActiveNote(null);
+        // Optionally, redirect to base path if not already there and no notes.
+        // if (pathname !== "/notes") {
+        //   router.push("/notes");
+        // }
       }
     }
-  }, [activeNoteId, notes, openNotes, router, pathname, activeNote]); // Keep dependencies
+  } else {
+    // No activeNoteId in URL
+    if (notes.length > 0) {
+      // If no specific note is requested via URL, and notes exist,
+      // default to the first note.
+      router.push(`/notes/${notes[0].id}`);
+    } else {
+      // No notes and no activeNoteId
+      setActiveNote(null);
+      // if (pathname !== "/notes") {
+      //    router.push("/notes");
+      // }
+    }
+  }
+}, [activeNoteId, notes, openNotes, router, pathname]);
 
   // Update open notes when notes change (e.g., title changes) - memoized to avoid unnecessary updates
   useEffect(() => {
